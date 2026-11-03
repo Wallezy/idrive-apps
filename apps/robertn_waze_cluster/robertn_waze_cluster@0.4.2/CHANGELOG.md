@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+The page follows the HMI display language: Simplified Chinese, with English
+for other languages or an unavailable HMI context. Diagnostic details and
+log lines keep their original text.
+
 ## 0.4.1
 
 While CarPlay's stream is live but shows no map, the status says why, from

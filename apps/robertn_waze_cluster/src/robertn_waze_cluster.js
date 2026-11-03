@@ -24,7 +24,9 @@
 
 const OnlineApp = require('oap-sdk/src/core/OnlineApp.js');
 const logging = require('oap-sdk/src/logging/logging');
+const someipBuilders = require('oap-sdk/src/someip/someipBuilders');
 const { WazeClusterControl, MAX_LINES } = require('./waze_cluster_control.js');
+const i18n = require('./i18n.js');
 
 const logger = logging.getSDKLogger();
 
@@ -40,8 +42,7 @@ const ROW_NAMES = Array.from({ length: MAX_LINES }, (_, i) => `wocRow${String(i 
 const LIST_RENDER_MS = 500;
 const ROW_CHARS = 90;
 const PRESS_DEDUPE_MS = 400;
-/* in Map view the stock map is the fallback while CarPlay's cluster stream
- * is not live; the menu names are the HMI's en_GB ones */
+/* In Map view the stock map is the fallback while CarPlay's stream is not live. */
 const SETUP_TEXT = 'Set Instrument cluster > Central display area to Map view';
 
 /* A line as one row: no line breaks, at most ROW_CHARS characters. */
@@ -63,6 +64,7 @@ class WazeClusterApp extends OnlineApp {
         this._actionById = {};
         this._lastPress = {};
         this._written = {};
+        this._writes = {};
         this._visible = false;
         this._sawForeground = false;
         this._shutdownPromise = null;
@@ -96,6 +98,7 @@ class WazeClusterApp extends OnlineApp {
         }
         const foregroundStart = this._startedForeground();
         return this._setupRhmi()
+            .then(() => this._setupLanguage())
             .then(() => this._registerEntryPoints())
             .then(() => {
                 // A foreground start declares itself ACTIVE before initialized()
@@ -125,6 +128,23 @@ class WazeClusterApp extends OnlineApp {
     }
 
     /* ---- RHMI ---- */
+    _setupLanguage() {
+        let proxy;
+        someipBuilders.buildTypedProxy('de.bmw.infotainment.hmi.hmicontext.HMIContext', 'HMI_CID')
+            .then((p) => { proxy = p; return proxy.init(); })
+            .then(() => proxy.waitUntilAvailable())
+            .then(() => proxy.currentDisplayLanguage.subscribe((value) => this._displayLanguage(value)))
+            .then(() => proxy.currentDisplayLanguage.getValue())
+            .then((value) => this._displayLanguage(value))
+            .catch((err) => logger.warn(`display language unavailable: ${err && err.message}`));
+    }
+
+    _displayLanguage(value) {
+        if (i18n.setHmiLanguage(value)) {
+            this._render();
+        }
+    }
+
     _setupRhmi() {
         const rhmi = this.rhmiApplication;
         this._state = rhmi.getByName(STATE_NAME);
@@ -275,8 +295,27 @@ class WazeClusterApp extends OnlineApp {
     _write(name, text) {
         if (this._written[name] !== text) {
             this._written[name] = text;
-            Promise.resolve(this._components[name].setValue(0, 'Text', text, 'Text'))
-                .catch((err) => logger.warn(`${name} render failed: ${err && err.message}`));
+            /* RHMI Text is ASCII on some units. Unicode uses a StringBundle;
+             * serialize both paths so a language change cannot leave old text. */
+            this._writes[name] = (this._writes[name] || Promise.resolve())
+                .then(() => {
+                    if (this._written[name] !== text) {
+                        return;
+                    }
+                    const comp = this._components[name];
+                    if (!/[^\x20-\x7e]/.test(text)) {
+                        return comp.setValue(0, 'Text', text, 'Text');
+                    }
+                    const id = `SID_WOC_${name}`;
+                    return comp.getStringBundle().setStrings({ [id]: text })
+                        .then(() => comp.setValue(0, 'Text', id, 'StringId'));
+                })
+                .catch((err) => {
+                    if (this._written[name] === text) {
+                        delete this._written[name];
+                    }
+                    logger.warn(`${name} render failed: ${err && err.message}`);
+                });
         }
     }
 
@@ -305,7 +344,10 @@ class WazeClusterApp extends OnlineApp {
             return;
         }
         this._write(STATUS_NAME, this._control.statusText());
-        this._write(SETUP_NAME, SETUP_TEXT);
+        this._write(SETUP_NAME, i18n.t(SETUP_TEXT));
+        this._write(ENABLE_NAME, i18n.t('Enable map'));
+        this._write(DISABLE_NAME, i18n.t('Disable map'));
+        this._write(RESTART_NAME, i18n.t('Restart head unit'));
         this._write(CAPTURE_NAME, this._control.captureButtonText());
         this._write(CAPTURE_STATUS, this._control.captureText());
         const patch = this._control.connectedPatch();

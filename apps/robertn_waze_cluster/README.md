@@ -30,6 +30,10 @@ the patch.
 
 ## The page
 
+The page and app tile support Simplified Chinese. Page text follows the
+HMI display language, with English as the fallback. Diagnostic details and
+log lines keep their original text. Translations are in `src/locales.js`.
+
 One `LT_State_Wide` page:
 
 | Row | What it does |
@@ -72,8 +76,8 @@ A patch with another sink, panel, size (not `1088x480`) or safe area (not
 ```sh
 node tools/test_control.js           # the socket client against fake sockets
 node tools/test_page.js              # the page against a fake SDK and HMI
-node tools/build.js                  # robertn_waze_cluster@0.4.1.src.tgz
-node tools/build.js --sdk <donor>    # also robertn_waze_cluster@0.4.1.tgz
+node tools/build.js                  # robertn_waze_cluster@0.4.2.src.tgz
+node tools/build.js --sdk <donor>    # also robertn_waze_cluster@0.4.2.tgz
 ```
 
 The app ships as a source package (`mgu-app.json`; `"build": "unit"` in the
@@ -92,7 +96,7 @@ Enter starts or stops a fake CarPlay stream.
 | `src/robertn_waze_cluster.js` | the app |
 | `src/waze_cluster_control.js` | both socket clients and the status logic |
 | `tools/` | build, fakes, tests, icon |
-| `robertn_waze_cluster@0.4.1/` | the package tree (manifest, RHMI UI, config) |
+| `robertn_waze_cluster@0.4.2/` | the package tree (manifest, RHMI UI, config) |
 
 ## License
 

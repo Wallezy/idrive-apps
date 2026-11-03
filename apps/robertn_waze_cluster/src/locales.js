@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+'use strict';
+
+module.exports = [{
+    hmiLanguages: ['CHINESISCH_SIMPLE'],
+    words: {
+        'Enable map': '启用地图',
+        'Disable map': '停用地图',
+        'Restart head unit': '重启主机',
+        'Set Instrument cluster > Central display area to Map view': '将仪表盘 > 中央显示区域设为地图视图',
+        'Stop capture': '停止采集',
+        'Capture logs (5 min)': '采集日志（5 分钟）',
+        'Logs: update Waze tool and reboot to enable capture': '日志：更新 Waze 工具并重启后可采集',
+        'Logs: recording — reconnect CarPlay now': '日志：正在录制，请重新连接 CarPlay',
+        'Logs: checking and opening capture…': '日志：正在检查并启动采集…',
+        'Logs: restoring tracing mode…': '日志：正在恢复追踪模式…',
+        'Logs: {0}': '日志：{0}',
+        'Logs: capture stopped; saved markers available in diagnostics': '日志：采集已停止，可在诊断中查看已保存的标记',
+        'Connecting…': '正在连接…',
+        'Patch pending — reboot to activate': '补丁待生效，请重启主机',
+        'Removal pending — reboot to finish': '补丁待移除，请重启主机',
+        'Patch service unavailable (reboot may be needed)': '补丁服务不可用（可能需要重启主机）',
+        'Restarting head unit…': '正在重启主机…',
+        'Reverting patch…': '正在还原补丁…',
+        'Applying patch…': '正在应用补丁…',
+        'Patch error': '补丁错误',
+        'Restart needed — {0}': '需要重启主机：{0}',
+        'restart to activate the map patch': '重启以使地图补丁生效',
+        'Not patched — {0}': '未应用补丁：{0}',
+        'Original — enable the map': '原始状态，请启用地图',
+        'Patch state unknown — {0}': '补丁状态未知：{0}',
+        'Patch state unknown — enable the map': '补丁状态未知，请启用地图',
+        'Patched — Enable map to update the patch': '已应用补丁，请选择启用地图以更新补丁',
+        'Patched — map service unavailable': '已应用补丁，地图服务不可用',
+        'Starting map…': '正在启动地图…',
+        'Showing: {0}': '正在显示：{0}',
+        'Waze map': 'Waze 地图',
+        'Map error': '地图错误',
+        'Map frozen — reconnect CarPlay': '地图已冻结，请重新连接 CarPlay',
+        'Patched — waiting for CarPlay': '已应用补丁，正在等待 CarPlay',
+        "Waiting for the phone's map — start navigation": '正在等待手机地图，请开始导航',
+        'Stream lost — reconnect CarPlay': '地图数据流已断开，请重新连接 CarPlay',
+        'Stream lost — restarting CarPlay': '地图数据流已断开，正在重启 CarPlay'
+    }
+}];

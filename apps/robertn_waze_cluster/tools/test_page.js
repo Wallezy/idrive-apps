@@ -16,7 +16,8 @@
  * the render's current state; a pending patch shows its line with no Enable
  * or Disable, from the daemon and, before the daemon runs, from its marker;
  * the line naming the cluster setting the map needs is always on the page,
- * under the status.
+ * under the status; the HMI's language at start and on changes, English
+ * fallback, Unicode string resources and untranslated diagnostic details.
  */
 const assert = require('assert');
 const EventEmitter = require('events');
@@ -34,6 +35,8 @@ const UI_DIR = path.join(PKG, 'rhmiData', 'uiDescriptions', 'ID7');
 const UI = JSON.parse(fs.readFileSync(path.join(UI_DIR, 'uiDescription.json'), 'utf8'));
 const XML = fs.readFileSync(path.join(UI_DIR, 'application.xml'), 'utf8');
 const APP_JSON = JSON.parse(fs.readFileSync(path.join(PKG, 'rhmiData', 'application.json'), 'utf8'));
+const TEXTS = JSON.parse(fs.readFileSync(path.join(PKG, 'rhmiData', 'variantGroups', 'Common', 'texts', 'en_GB.json'), 'utf8'));
+const ZH_TEXTS = JSON.parse(fs.readFileSync(path.join(PKG, 'rhmiData', 'variantGroups', 'Common', 'texts', 'zh_CN.json'), 'utf8'));
 
 /* short: macOS limits a socket path to 104 bytes */
 const RSOCK = `/tmp/woc-pr-${process.pid}.sock`;
@@ -71,7 +74,21 @@ class FakeComponent extends EventEmitter {
         this.visible = (desc && desc.properties && desc.properties.Visible) ? desc.properties.Visible.value === 1 : null;
     }
     getId() { return this.id; }
-    setValue(row, cell, value) { this.text = value; return Promise.resolve(); }
+    setValue(row, cell, value, type) {
+        assert(type === 'StringId' || !/[^\x20-\x7e]/.test(value), 'Unicode uses a StringBundle');
+        this.text = type === 'StringId' ? TEXTS[value] : value;
+        return Promise.resolve();
+    }
+    getStringBundle() {
+        return { setStrings: (values) => new Promise((resolve) => setTimeout(() => {
+            Object.keys(values).forEach((id) => {
+                assert(Object.prototype.hasOwnProperty.call(TEXTS, id), `declared string ${id}`);
+                assert(Object.prototype.hasOwnProperty.call(ZH_TEXTS, id), `Chinese string ${id}`);
+            });
+            Object.assign(TEXTS, values);
+            resolve();
+        }, 10)) };
+    }
     setEnabled(enabled) { this.enabled = enabled; return Promise.resolve(); }
     setVisible(visible) { this.visible = visible; return Promise.resolve(); }
     updateResources() { return Promise.resolve(); }
@@ -126,9 +143,25 @@ class OnlineApp extends EventEmitter {
     destroyBundles() { return Promise.resolve(); }
 }
 
+let displayLanguage;
+let language = 'ENGLISCH';
 const FAKE_MODULES = {
     'oap-sdk/src/core/OnlineApp.js': OnlineApp,
-    'oap-sdk/src/logging/logging': { getSDKLogger: () => logger }
+    'oap-sdk/src/logging/logging': { getSDKLogger: () => logger },
+    'oap-sdk/src/someip/someipBuilders': {
+        buildTypedProxy: (iface, instance) => {
+            assert.strictEqual(iface, 'de.bmw.infotainment.hmi.hmicontext.HMIContext');
+            assert.strictEqual(instance, 'HMI_CID');
+            return Promise.resolve({
+                init: () => Promise.resolve(),
+                waitUntilAvailable: () => Promise.resolve(),
+                currentDisplayLanguage: {
+                    subscribe: (cb) => { displayLanguage = cb; return Promise.resolve(); },
+                    getValue: () => Promise.resolve(language)
+                }
+            });
+        }
+    }
 };
 
 /* Loads the app's entry module (mgu-app.json's first) with the SDK's names
@@ -145,6 +178,17 @@ function runSource() {
 /* ---- scenario ----------------------------------------------------------------- */
 
 async function main() {
+    const i18n = require('../src/i18n.js');
+    require('../src/locales.js').forEach((locale) => Object.entries(locale.words).forEach(([key, text]) => {
+        assert.deepStrictEqual((text.match(/\{\d+\}/g) || []).sort(), (key.match(/\{\d+\}/g) || []).sort(),
+            `translation preserves arguments: ${key}`);
+    }));
+    i18n.setHmiLanguage('CHINESISCH_SIMPLE');
+    assert.strictEqual(i18n.t('Logs: {0}', 'raw {1}'), '日志：raw {1}', 'arguments are not translated or expanded');
+    assert.strictEqual(i18n.t('unknown native reason'), 'unknown native reason');
+    i18n.setHmiLanguage(null);
+    assert.strictEqual(i18n.t('Connecting…'), 'Connecting…');
+
     const components = UI.containers['1'].components;
     const buttons = Object.entries(components).filter(([, d]) => d.type === 'button');
     const xmlButtons = [...XML.matchAll(/<component id="(\d+)" type="button"/g)].map((m) => m[1]).sort();
@@ -172,9 +216,26 @@ async function main() {
 
     try {
         process.exit = (code) => { throw new Error(`process.exit(${code})`); };
+        language = 'CHINESISCH_SIMPLE';
         runSource();
         const status = byName.wocStatus;
+        await until('Chinese initial language', () => status.text === `正在显示：${RENDER_PAGE} — ${RENDER_FPS}` &&
+            byName.wocEnable.text === '启用地图' && byName.wocDisable.text === '停用地图' &&
+            byName.wocRestart.text === '重启主机' && byName.wocCapture.text === '采集日志（5 分钟）' &&
+            byName.wocSetup.text === '将仪表盘 > 中央显示区域设为地图视图');
+        assert.strictEqual(ZH_TEXTS.SID_WOC_TITLE, '仪表地图');
+        displayLanguage('UNSUPPORTED');
         await until('page shows the map', () => status.text === `Showing: ${RENDER_PAGE} — ${RENDER_FPS}`);
+        await until('English fallback buttons', () => byName.wocEnable.text === 'Enable map' &&
+            byName.wocCapture.text === 'Capture logs (5 min)');
+        /* Switch back while StringBundle writes are in flight. */
+        displayLanguage('CHINESISCH_SIMPLE');
+        await sleep(5);
+        displayLanguage('ENGLISCH');
+        await sleep(100);
+        assert.strictEqual(status.text, `Showing: ${RENDER_PAGE} — ${RENDER_FPS}`);
+        assert.strictEqual(byName.wocEnable.text, 'Enable map');
+        console.log('ok   HMI language at start, English fallback, Unicode resources and rapid language changes');
         assert(!logs.some((l) => /^error/.test(l)), logs.filter((l) => /^error/.test(l)).join('\n'));
         const bound = logs.filter((l) => l.startsWith('info: BIND OK: ')).map((l) => l.split(' ')[3]).sort();
         assert.deepStrictEqual(bound, ['wocCapture', 'wocDisable', 'wocEnable', 'wocRestart'], 'bound buttons');
@@ -203,6 +264,18 @@ async function main() {
         byName.ST_OnlineApps_WazeCluster.emit('visible', { visible: true });
         await until('page reads the current state', () => status.text === 'Patched — waiting for CarPlay');
         console.log('ok   a page opened again reads the render\'s current state');
+
+        displayLanguage('CHINESISCH_SIMPLE');
+        patch.announce('error', null, 'unknown CarPlay build: {0}');
+        await until('Chinese error with raw detail', () => status.text === '补丁错误: unknown CarPlay build: {0}');
+        patch.announce('patched', 'high', null);
+        render.announce('idle', "Waiting for the phone's map — start navigation");
+        await until('Chinese map wait', () => status.text === '正在等待手机地图，请开始导航');
+        render.log('raw diagnostic {0}');
+        await until('raw log in Chinese', () => byName.wocRow01.text === 'map: raw diagnostic {0}');
+        displayLanguage('ENGLISCH');
+        await until('English wait', () => status.text === "Waiting for the phone's map — start navigation");
+        console.log('ok   translated status, diagnostic arguments and log lines kept verbatim');
 
         /* The patch the install wrote, from the daemon: its line, no Enable
          * or Disable, the restart offered. */

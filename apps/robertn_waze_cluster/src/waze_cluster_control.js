@@ -54,6 +54,7 @@
 const EventEmitter = require('events');
 const fs = require('fs');
 const net = require('net');
+const { t } = require('./i18n.js');
 
 const RENDER_PATH = '/dev/shm/waze-on-cluster/ctl.sock';
 const PATCH_PATH = '/dev/shm/waze-on-cluster/patch.sock';
@@ -329,17 +330,17 @@ class WazeClusterControl extends EventEmitter {
     }
 
     captureButtonText() {
-        return ['opening', 'open'].includes(this.captureState.state) ? 'Stop capture' : 'Capture logs (5 min)';
+        return ['opening', 'open'].includes(this.captureState.state) ? t('Stop capture') : t('Capture logs (5 min)');
     }
 
     captureText() {
         const s = this.captureState;
-        if (s.state === 'unavailable') return 'Logs: update Waze tool and reboot to enable capture';
-        if (s.state === 'open') return 'Logs: recording — reconnect CarPlay now';
-        if (s.state === 'opening') return 'Logs: checking and opening capture…';
-        if (s.state === 'closing') return 'Logs: restoring tracing mode…';
-        if (s.error) return `Logs: ${s.error}`;
-        return 'Logs: capture stopped; saved markers available in diagnostics';
+        if (s.state === 'unavailable') return t('Logs: update Waze tool and reboot to enable capture');
+        if (s.state === 'open') return t('Logs: recording — reconnect CarPlay now');
+        if (s.state === 'opening') return t('Logs: checking and opening capture…');
+        if (s.state === 'closing') return t('Logs: restoring tracing mode…');
+        if (s.error) return t('Logs: {0}', s.error);
+        return t('Logs: capture stopped; saved markers available in diagnostics');
     }
 
     /* ---- status ---- */
@@ -347,64 +348,64 @@ class WazeClusterControl extends EventEmitter {
     statusText() {
         const p = this.patch.link;
         if (p === 'down') {
-            return 'Connecting…';
+            return t('Connecting…');
         }
         const pending = this.pending();
         if (pending === 'apply' && !this._restartRequested) {
-            return 'Patch pending — reboot to activate';
+            return t('Patch pending — reboot to activate');
         }
         if (pending === 'revert' && !this._restartRequested) {
-            return 'Removal pending — reboot to finish';
+            return t('Removal pending — reboot to finish');
         }
         if (p !== 'up') {
-            return 'Patch service unavailable (reboot may be needed)';
+            return t('Patch service unavailable (reboot may be needed)');
         }
         if (this._restartRequested) {
-            return 'Restarting head unit…';
+            return t('Restarting head unit…');
         }
         const ps = this.patchStatus;
         const state = ps && ps.state;
         if (state === 'busy') {
-            return this._lastPatchCmd === 'revert' ? 'Reverting patch…' : 'Applying patch…';
+            return this._lastPatchCmd === 'revert' ? t('Reverting patch…') : t('Applying patch…');
         }
         if (state === 'error') {
-            return 'Patch error' + (ps.reason ? `: ${ps.reason}` : '');
+            return t('Patch error') + (ps.reason ? `: ${ps.reason}` : '');
         }
         /* A change written by a daemon that does not say which. */
         if (pending) {
-            return `Restart needed — ${ps.reason || 'restart to activate the map patch'}`;
+            return t('Restart needed — {0}', ps.reason || t('restart to activate the map patch'));
         }
         if (state === 'original') {
-            return ps.conflict ? `Not patched — ${ps.conflict}` : 'Original — enable the map';
+            return ps.conflict ? t('Not patched — {0}', ps.conflict) : t('Original — enable the map');
         }
         /* Any state other than patched (unknown, or one this app does not know)
          * needs Enable map, which applies every edit the daemon has. */
         if (state !== 'patched') {
-            return ps && ps.conflict ? `Patch state unknown — ${ps.conflict}` : 'Patch state unknown — enable the map';
+            return ps && ps.conflict ? t('Patch state unknown — {0}', ps.conflict) : t('Patch state unknown — enable the map');
         }
         /* A unit patched by an older app can sit on another capture sink,
          * panel, size or safe area; the stream then misses the render, or the
          * guidance UI sits under the gauges. Enable map re-applies the current
          * patch. */
         if (this._outdated(ps)) {
-            return 'Patched — Enable map to update the patch';
+            return t('Patched — Enable map to update the patch');
         }
         /* patched: the render tool owns the line */
         if (this.render.link !== 'up') {
-            return 'Patched — map service unavailable';
+            return t('Patched — map service unavailable');
         }
         const rs = this.renderStatus;
         switch (rs && rs.state) {
         case 'starting':
-            return 'Starting map…';
+            return t('Starting map…');
         case 'showing':
-            return `Showing: ${rs.page || 'Waze map'}` + (rs.reason ? ` — ${rs.reason}` : '');
+            return t('Showing: {0}', rs.page || t('Waze map')) + (rs.reason ? ` — ${rs.reason}` : '');
         case 'error':
-            return 'Map error' + (rs.reason ? `: ${rs.reason}` : '');
+            return t('Map error') + (rs.reason ? `: ${rs.reason}` : '');
         case 'frozen':
-            return 'Map frozen — reconnect CarPlay';
+            return t('Map frozen — reconnect CarPlay');
         default:
-            return (rs && rs.reason) || 'Patched — waiting for CarPlay';
+            return rs && rs.reason ? t(rs.reason) : t('Patched — waiting for CarPlay');
         }
     }
 
